@@ -32,6 +32,10 @@ def calcular_energia(flujo_base_lb_hr, factor_escala, t_in_f, t_out_f, cp_asumid
 
 # TÁCTICA DE INGENIERÍA: EL ATRAPALOTODO
 # Interceptamos CUALQUIER solicitud POST (sin importar cómo Vercel mutile la ruta)
+@app.options("/api/simular")
+def opciones_simular():
+    return {"status": "ok"}
+
 @app.post("/{cualquier_ruta:path}")
 def ejecutar_simulacion(escenario: EscenarioRequest):
     try:
