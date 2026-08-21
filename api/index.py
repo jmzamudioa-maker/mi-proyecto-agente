@@ -30,11 +30,10 @@ def preflight_handler(request: Request, full_path: str):
     return response
 
 # --- A partir de aquí, deja tu código intacto ---
-class EscenarioRequest(BaseModel):
-class EscenarioRequest(BaseModel):
-    flujo_mmscfd: float
-    tag_caja: str
-    tag_exp: str
+    class EscenarioRequest(BaseModel):
+        flujo_mmscfd: float
+        tag_caja: str
+        tag_exp: str
 
 def calcular_energia(flujo_base_lb_hr, factor_escala, t_in_f, t_out_f, cp_asumido=0.6):
     try:
