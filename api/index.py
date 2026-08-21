@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel
 import os
 import json
@@ -32,9 +32,12 @@ def calcular_energia(flujo_base_lb_hr, factor_escala, t_in_f, t_out_f, cp_asumid
 
 # TÁCTICA DE INGENIERÍA: EL ATRAPALOTODO
 # Interceptamos CUALQUIER solicitud POST (sin importar cómo Vercel mutile la ruta)
-@app.options("/api/simular")
-def opciones_simular():
-    return {"status": "ok"}
+@app.options("/{path:path}")
+def bypass_cors_universal(path: str, response: Response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return {"mensaje": "Válvula abierta"}
 
 @app.post("/{cualquier_ruta:path}")
 def ejecutar_simulacion(escenario: EscenarioRequest):
