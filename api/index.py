@@ -3,8 +3,8 @@ from pydantic import BaseModel
 import os
 import json
 import re
+import traceback  # <--- NUEVA LIBRERÍA DE DIAGNÓSTICO
 
-# Usamos la credencial directa y explícita
 from azure.identity import ClientSecretCredential
 from azure.ai.projects import AIProjectClient
 
@@ -27,16 +27,14 @@ def calcular_energia(flujo_base_lb_hr, factor_escala, t_in_f, t_out_f, cp_asumid
 @app.post("/api/simular")
 def ejecutar_simulacion(escenario: EscenarioRequest):
     try:
-        # 1. Extracción y LIMPIEZA de variables (borramos espacios en blanco invisibles)
         tenant = os.environ.get("AZURE_TENANT_ID", "").strip()
         client = os.environ.get("AZURE_CLIENT_ID", "").strip()
         secret = os.environ.get("AZURE_CLIENT_SECRET", "").strip()
         endpoint = os.environ.get("AZURE_AI_ENDPOINT", "").strip()
         
         if not all([tenant, client, secret, endpoint]):
-            raise ValueError("Faltan variables de entorno en Vercel o están vacías.")
+            raise ValueError("Faltan variables de entorno en Vercel.")
 
-        # 2. Autenticación Blindada
         credential = ClientSecretCredential(
             tenant_id=tenant,
             client_id=client,
@@ -97,4 +95,6 @@ def ejecutar_simulacion(escenario: EscenarioRequest):
             }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error del servidor/IA: {str(e)}")
+        # AQUÍ ESTÁ LA MAGIA: Esto extraerá la raíz profunda del error de red
+        error_details = traceback.format_exc()
+        raise HTTPException(status_code=500, detail=f"REPORTE TÉCNICO:\n{error_details}")
