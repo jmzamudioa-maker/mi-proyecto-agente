@@ -3,6 +3,8 @@ from pydantic import BaseModel
 import os
 import json
 import re
+
+# Importaciones clave para la Nube
 from azure.identity import EnvironmentCredential
 from azure.ai.projects import AIProjectClient
 
@@ -24,13 +26,17 @@ def calcular_energia(flujo_base_lb_hr, factor_escala, t_in_f, t_out_f, cp_asumid
     except:
         return None, None
 
+# ¡NOTA CLAVE! Usamos 'def' normal en lugar de 'async def' para evitar bloqueos en Vercel
 @app.post("/api/simular")
 def ejecutar_simulacion(escenario: EscenarioRequest):
-    # En Vercel, DefaultAzureCredential leerá las variables de entorno automáticamente
     try:
+        # 1. Autenticación Estricta por Variables de Entorno
         credential = EnvironmentCredential()
-        endpoint = os.environ.get("AZURE_AI_ENDPOINT", "https://rg-agente-planta-gas-resource.services.ai.azure.com/api/projects/rg-agente-planta-gas")
+        endpoint = os.environ.get("AZURE_AI_ENDPOINT")
         
+        if not endpoint:
+            raise ValueError("Falta la variable de entorno AZURE_AI_ENDPOINT en Vercel.")
+
         project_client = AIProjectClient(endpoint=endpoint, credential=credential)
         
         with project_client:
@@ -40,6 +46,7 @@ def ejecutar_simulacion(escenario: EscenarioRequest):
             
             factor_escala = escenario.flujo_mmscfd / 216.7
             
+            # 2. Prompt Estricto
             prompt_calculo = rf"""
             Actúa como un extractor de datos para un simulador riguroso.
             REGLA ABSOLUTA: Tu respuesta debe ser ÚNICAMENTE un objeto JSON. Cero texto. Sin bloques markdown.
@@ -58,15 +65,16 @@ def ejecutar_simulacion(escenario: EscenarioRequest):
             }}
             """
             
+            # 3. Llamada a la IA
             response = openai_client.responses.create(
                 input=[{"role": "user", "content": prompt_calculo}],
                 extra_body={"agent_reference": {"name": my_agent, "version": my_version, "type": "agent_reference"}}
             )
 
+            # 4. Procesamiento
             json_limpio = re.sub(r'```json\n|```', '', response.output_text).strip()
             datos_ia = json.loads(json_limpio)
             
-            # Cálculos en el servidor (FastAPI)
             caja = datos_ia.get('caja_fria', {})
             _, duty_caja = calcular_energia(float(caja.get('flujo_base_lb_hr') or 150000), factor_escala, float(caja.get('t_in_f') or 0), float(caja.get('t_out_f') or 0))
             
@@ -74,10 +82,10 @@ def ejecutar_simulacion(escenario: EscenarioRequest):
             _, work_exp = calcular_energia(float(exp.get('flujo_base_lb_hr') or 150000), factor_escala, float(exp.get('t_in_f') or 0), float(exp.get('t_out_f') or 0))
             hp_exp = work_exp / 2544.43 if work_exp else 0
             
-            # Devolvemos la respuesta formateada al cliente web
+            # 5. Respuesta Exitosa
             return {
                 "status": "success",
-                "parametros_entrada": escenario.dict(),
+                "parametros_entrada": escenario.model_dump(),
                 "resultados": {
                     "factor_escala": round(factor_escala, 4),
                     "recuperacion_c3_porcentaje": datos_ia.get('recuperacion_c3_porcentaje'),
@@ -87,4 +95,5 @@ def ejecutar_simulacion(escenario: EscenarioRequest):
             }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # En caso de error, FastAPI lo devolverá limpio para que sepas qué falló
+        raise HTTPException(status_code=500, detail=f"Error del servidor/IA: {str(e)}")
