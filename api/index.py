@@ -72,8 +72,7 @@ def ejecutar_simulacion(escenario: EscenarioRequest):
             
             response = openai_client.responses.create(
             	model="gpt-4o",
-            	input=[{"role": "user", "content": prompt_calculo}],
-            	extra_body={"agent_reference": {"name": "Agente-Experto-Planta-Gas", "version": "1", "type": "agent_reference"}}
+            	input=[{"role": "user", "content": prompt_calculo}]
         	)
             model="gpt-4o",
             input=[{"role": "user", "content": prompt_calculo}],
