@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GP&I - Entorno de Decisión Agéntica</title>
+    <style>
+        :root {
+            --primary-color: #0d47a1;
+            --secondary-color: #1976d2;
+            --bg-color: #f4f6f8;
+            --panel-bg: #ffffff;
+            --text-color: #333;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 1100px;
+        }
+        .header h1 {
+            color: var(--primary-color);
+            margin: 0 0 5px 0;
+        }
+        .header p {
+            color: #666;
+            margin: 0;
+            font-weight: bold;
+        }
+        .dashboard-container {
+            display: flex;
+            gap: 20px;
+            max-width: 1200px;
+            width: 100%;
+            flex-wrap: wrap;
+        }
+        .panel {
+            background-color: var(--panel-bg);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            flex: 1;
+            min-width: 350px;
+            display: flex;
+            flex-direction: column;
+        }
+        h3 {
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--secondary-color);
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        /* Chat */
+        .chat-box {
+            flex-grow: 1;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            height: 400px;
+            overflow-y: auto;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        .chat-message {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .msg-usuario { background-color: #e3f2fd; border-left: 4px solid var(--primary-color); }
+        .msg-agente { background-color: #fff3e0; border-left: 4px solid #f57c00; }
+        
+        .input-group { display: flex; gap: 10px; }
+        input[type="text"], input[type="number"], select {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            width: 100%;
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+        button:hover { background-color: var(--secondary-color); }
+        button:disabled { background-color: #999; }
+        
+        /* Formulario Dinámico */
+        .form-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .form-group {
+            flex: 1;
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            font-size: 13px;
+            color: #444;
+        }
+        .resultados-box {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e8f5e9;
+            border-left: 4px solid #2e7d32;
+            border-radius: 5px;
+            display: none;
+        }
+        .section-title {
+            font-size: 14px;
+            background-color: #eee;
+            padding: 5px 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>Entorno de Decisión Agéntica (HITL)</h1>
+        <p>GP&I - Integración Termodinámica y Manuales Operativos</p>
+    </div>
+
+    <div class="dashboard-container">
+        <!-- PANEL IZQUIERDO: Consulta -->
+        <div class="panel">
+            <h3>Consulta de Información de Planta</h3>
+            <div class="chat-box" id="chatBox">
+                <div class="chat-message msg-agente">
+                    <strong>Agente Senior GP&I:</strong> Sistema en línea. Listo para consultar planos, manuales de operación y estructurar planes de evaluación. ¿Qué equipo evaluaremos hoy?
+                </div>
+            </div>
+            <div class="input-group">
+                <input type="text" id="inputPregunta" placeholder="Ej: ¿Cuáles son las condiciones de diseño del KAE-4140?">
+                <button id="btnEnviarChat" onclick="enviarMensaje()">Preguntar</button>
+            </div>
+        </div>
+
+        <!-- PANEL DERECHO: Consola de Cálculo -->
+        <div class="panel">
+            <h3>Consola del Ingeniero de Procesos</h3>
+            <p style="font-size: 13px; color: #666; margin-top:0;">Seleccione el módulo de evaluación e ingrese los parámetros operativos acordados.</p>
+            
+            <div class="form-group">
+                <label>Módulo de Evaluación</label>
+                <select id="tipo_evaluacion" onchange="cambiarModulo()">
+                    <option value="flash">Termodinámica Base (Flash PT)</option>
+                    <option value="expander" selected>Expander / Compresor (Potencia)</option>
+                </select>
+            </div>
+
+            <div class="section-title">Condiciones de Entrada (Comunes)</div>
+            <div class="form-group">
+                <label>Mezcla (Formato CoolProp)</label>
+                <input type="text" id="val_mezcla" value="Methane[0.8]&Ethane[0.2]">
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Temp. Entrada (°C)</label>
+                    <input type="number" step="0.1" id="val_temp_in" value="35.0">
+                </div>
+                <div class="form-group">
+                    <label>Presión Entrada (barg)</label>
+                    <input type="number" step="0.1" id="val_pres_in" value="50.0">
+                </div>
+                <div class="form-group">
+                    <label>Flujo (kg/h)</label>
+                    <input type="number" step="100" id="val_flujo" value="10000">
+                </div>
+            </div>
+
+            <!-- Campos Dinámicos para Equipos -->
+            <div id="modulo_equipos" style="display: block;">
+                <div class="section-title" id="titulo_modulo">Parámetros del Expansor / Compresor</div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Presión Salida (barg)</label>
+                        <input type="number" step="0.1" id="val_pres_out" value="15.0">
+                    </div>
+                    <div class="form-group">
+                        <label>Eficiencia Isentrópica (%)</label>
+                        <input type="number" step="1" id="val_eficiencia" value="75">
+                    </div>
+                </div>
+            </div>
+            
+            <button id="btnCalcular" onclick="validarYCalcular()" style="width: 100%; background-color: #2e7d32; margin-top: 10px;">Ejecutar Simulación</button>
+
+            <!-- Aterrizaje de Resultados -->
+            <div class="resultados-box" id="boxResultados">
+                <p>Estado: <span style="color: #2e7d32;">Simulación Convergida</span></p>
+                <div id="res_dinamico">
+                    <!-- JavaScript inyectará los datos reales aquí -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = "http://127.0.0.1:8000";
+
+        // Cambiar la vista de la consola dependiendo de la evaluación
+        function cambiarModulo() {
+            const tipo = document.getElementById('tipo_evaluacion').value;
+            const moduloEquipos = document.getElementById('modulo_equipos');
+            const tituloModulo = document.getElementById('titulo_modulo');
+
+            if (tipo === 'expander') {
+                moduloEquipos.style.display = 'block';
+                tituloModulo.innerText = 'Parámetros del Expansor / Compresor';
+            } else if (tipo === 'flash') {
+                moduloEquipos.style.display = 'none';
+            }
+        }
+
+        // Flujo del Chat RAG
+        async function enviarMensaje() {
+            const input = document.getElementById('inputPregunta');
+            const chatBox = document.getElementById('chatBox');
+            const btn = document.getElementById('btnEnviarChat');
+            const pregunta = input.value.trim();
+
+            if (!pregunta) return;
+
+            chatBox.innerHTML += `<div class="chat-message msg-usuario"><strong>Tú:</strong> ${pregunta}</div>`;
+            input.value = '';
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            btn.disabled = true;
+            btn.innerText = "Analizando...";
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pregunta: pregunta })
+                });
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const respuestaHTML = data.respuesta.replace(/\n/g, '<br>');
+                    chatBox.innerHTML += `<div class="chat-message msg-agente"><strong>Agente IA:</strong><br>${respuestaHTML}</div>`;
+                } else {
+                    chatBox.innerHTML += `<div class="chat-message msg-agente" style="border-left-color: red;"><strong>Error:</strong> ${data.detalle}</div>`;
+                }
+            } catch (error) {
+                chatBox.innerHTML += `<div class="chat-message msg-agente" style="border-left-color: red;"><strong>Conexión Fallida:</strong> Revisa el servidor Python.</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Preguntar";
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+        }
+
+        // Permitir Enter en el chat
+        document.getElementById("inputPregunta").addEventListener("keypress", function(event) {
+            if (event.key === "Enter") { event.preventDefault(); enviarMensaje(); }
+        });
+
+        // Flujo de Cálculo Real hacia Python
+        async function validarYCalcular() {
+            const btn = document.getElementById('btnCalcular');
+            const resBox = document.getElementById('boxResultados');
+            const resDinamico = document.getElementById('res_dinamico');
+            const tipoEvaluacion = document.getElementById('tipo_evaluacion').value;
+            
+            btn.disabled = true;
+            btn.innerText = "Ejecutando Modelo...";
+            resBox.style.display = 'none';
+
+            // Armar el payload estructurado
+            const payload = {
+                tipo_evaluacion: tipoEvaluacion,
+                mezcla: document.getElementById('val_mezcla').value,
+                flujo_kg_h: parseFloat(document.getElementById('val_flujo').value),
+                entrada: {
+                    temp_c: parseFloat(document.getElementById('val_temp_in').value),
+                    pres_barg: parseFloat(document.getElementById('val_pres_in').value)
+                },
+                equipo: {}
+            };
+
+            // Añadir datos de equipo si aplica
+            if (tipoEvaluacion === 'expander') {
+                payload.equipo.pres_out_barg = parseFloat(document.getElementById('val_pres_out').value);
+                payload.equipo.eficiencia = parseFloat(document.getElementById('val_eficiencia').value) / 100.0;
+            }
+
+            try {
+                // LLamada real a la API de Python
+                const response = await fetch(`${API_BASE}/api/calcular`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    if(data.tipo === 'flash') {
+                        resDinamico.innerHTML = `
+                            <p>Entalpía: <span>${data.resultados.entalpia}</span> kJ/kg</p>
+                            <p>Densidad: <span>${data.resultados.densidad}</span> kg/m³</p>
+                        `;
+                    } else if (data.tipo === 'expander') {
+                        resDinamico.innerHTML = `
+                            <p>Caída de Presión (ΔP): <span>${data.resultados.delta_p}</span> bar</p>
+                            <p>Salto Entálpico (ΔH): <span>${data.resultados.delta_h}</span> kJ/kg</p>
+                            <p>Potencia Estimada: <span style="font-size: 18px; font-weight:bold; color:#0d47a1;">${data.resultados.potencia}</span> kW</p>
+                        `;
+                    }
+                    resBox.style.display = 'block';
+                } else {
+                    alert("Error en el cálculo: " + data.detalle);
+                }
+
+            } catch (error) {
+                alert("Falla de comunicación con el motor termodinámico local.");
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Ejecutar Simulación";
+            }
+        }
+    </script>
+</body>
+</html>

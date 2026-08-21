@@ -1,19 +1,17 @@
 from fastapi import FastAPI, Request, Response
 from pydantic import BaseModel
-import os
-import json
-import re
+from typing import Optional
+import CoolProp.CoolProp as CP
 import traceback
 
-from azure.identity import ClientSecretCredential
+from azure.identity import InteractiveBrowserCredential
 from azure.ai.projects import AIProjectClient
 
-app = FastAPI(title="API Agente Simulador - Planta de Gas")
+app = FastAPI(title="Motor de Inferencia y Cálculo GP&I")
 
-# VÁLVULA DE DERIVACIÓN MANUAL (Bypass Absoluto de CORS)
+# --- 1. BYPASS DE CORS ABSOLUTO ---
 @app.middleware("http")
 async def bypass_cors_manual(request: Request, call_next):
-    # Si es el mensajero de seguridad (OPTIONS), darle OK inmediato con permisos totales
     if request.method == "OPTIONS":
         return Response(
             status_code=200,
@@ -23,112 +21,119 @@ async def bypass_cors_manual(request: Request, call_next):
                 "Access-Control-Allow-Headers": "*"
             }
         )
-    
-    # Para el flujo normal de datos (POST), procesar y sellar la salida
     response = await call_next(request)
     response.headers["Access-Control-Allow-Origin"] = "*"
     return response
 
-class EscenarioRequest(BaseModel):
-    flujo_mmscfd: float
-    tag_caja: str
-    tag_exp: str
+# --- 2. INICIALIZACIÓN DEL AGENTE AZURE (RAG) ---
+print("--- Iniciando Canal de Comunicación GP&I ---")
+endpoint = "https://rg-agente-planta-gas-resource.services.ai.azure.com/api/projects/rg-agente-planta-gas"
+my_agent = "Agente-Experto-Planta-Gas"
+my_version = "1"
 
-def calcular_energia(flujo_base_lb_hr, factor_escala, t_in_f, t_out_f, cp_asumido=0.6):
+try:
+    print("[*] Autenticando sesión en Azure...")
+    credential = InteractiveBrowserCredential(tenant_id="7cb2c112-23ee-4730-b741-cf995311a163")
+    project_client = AIProjectClient(endpoint=endpoint, credential=credential)
+    openai_client = project_client.get_openai_client()
+    print("[*] Conexión a Azure exitosa.")
+except Exception as e:
+    print(f"[ERROR DE AUTENTICACIÓN]: {e}")
+
+# --- 3. MODELOS DE ESTRUCTURA JSON ---
+class MensajeChat(BaseModel):
+    pregunta: str
+
+class CondicionesEntrada(BaseModel):
+    temp_c: float
+    pres_barg: float
+
+class DatosEquipo(BaseModel):
+    pres_out_barg: Optional[float] = None
+    eficiencia: Optional[float] = None
+
+class PayloadCalculo(BaseModel):
+    tipo_evaluacion: str
+    mezcla: str
+    flujo_kg_h: float
+    entrada: CondicionesEntrada
+    equipo: Optional[DatosEquipo] = None
+
+# --- 4. RUTAS DEL SERVIDOR ---
+
+@app.post("/api/chat")
+async def consultar_manuales(mensaje: MensajeChat):
+    """Fase 1: El Asesor IA lee manuales y propone un plan."""
     try:
-        flujo_escalado = flujo_base_lb_hr * factor_escala
-        delta_t = abs(t_in_f - t_out_f)
-        duty_btu_hr = flujo_escalado * cp_asumido * delta_t
-        return flujo_escalado, duty_btu_hr
-    except:
-        return None, None
-
-# TÁCTICA DE INGENIERÍA: EL ATRAPALOTODO
-# Interceptamos CUALQUIER solicitud POST (sin importar cómo Vercel mutile la ruta)
-@app.options("/{path:path}")
-def bypass_cors_universal(path: str, response: Response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-    return {"mensaje": "Válvula abierta"}
-
-@app.post("/{cualquier_ruta:path}")
-def ejecutar_simulacion(escenario: EscenarioRequest):
-    try:
-        tenant = os.environ.get("AZURE_TENANT_ID", "").strip()
-        client = os.environ.get("AZURE_CLIENT_ID", "").strip()
-        secret = os.environ.get("AZURE_CLIENT_SECRET", "").strip()
-        endpoint = os.environ.get("AZURE_AI_ENDPOINT", "").strip()
-        
-        if not all([tenant, client, secret, endpoint]):
-            raise ValueError("Faltan variables de entorno en Vercel.")
-
-        credential = ClientSecretCredential(
-            tenant_id=tenant,
-            client_id=client,
-            client_secret=secret
+        response = openai_client.responses.create(
+            input=[{"role": "user", "content": mensaje.pregunta}],
+            extra_body={
+                "agent_reference": {
+                    "name": my_agent, 
+                    "version": my_version, 
+                    "type": "agent_reference"
+                }
+            }
         )
-        
-        project_client = AIProjectClient(endpoint=endpoint, credential=credential)
-        
-        with project_client:
-            openai_client = project_client.get_openai_client()
-            my_agent = "Agente-Experto-Planta-Gas"
-            my_version = "1"
-            
-            factor_escala = escenario.flujo_mmscfd / 216.7
-            
-            prompt_calculo = rf"""
-            Actúa como un extractor de datos para un simulador riguroso.
-            REGLA ABSOLUTA: Tu respuesta debe ser ÚNICAMENTE un objeto JSON. Cero texto. Sin bloques markdown.
-            
-            Extrae de los documentos del PFD:
-            1. Balance de Materia (Corr 4, 5 y 6). Corriente 4 = Corriente 5 + Corriente 6.
-            2. Recuperación C3: (C3 en Corr 6 / C3 en Corr 4) * 100.
-            3. Caja Fría ({escenario.tag_caja}): Temp entrada/salida y flujo másico base.
-            4. Turboexpander ({escenario.tag_exp}): Presión/Temp entrada/salida, y flujo másico base.
+        return {"status": "success", "respuesta": response.output_text}
+    except Exception as e:
+        return {"status": "error", "detalle": str(e)}
 
-            ESTRUCTURA JSON EXACTA OBLIGATORIA:
-            {{
-                "recuperacion_c3_porcentaje": <numero>,
-                "caja_fria": {{"t_in_f": <numero>, "t_out_f": <numero>, "flujo_base_lb_hr": <numero>}},
-                "expander": {{"p_in_psi": <numero>, "t_in_f": <numero>, "p_out_psi": <numero>, "t_out_f": <numero>, "flujo_base_lb_hr": <numero>}}
-            }}
-            """
-            
-            response = openai_client.responses.create(
-            	model="gpt-4o",
-            	input=[{"role": "user", "content": prompt_calculo}]
-        	)
-            model="gpt-4o",
-            input=[{"role": "user", "content": prompt_calculo}]
+@app.post("/api/calcular")
+async def ejecutar_evaluacion(payload: PayloadCalculo):
+    """Fase 2: Motor termodinámico estructurado (CoolProp)."""
+    try:
+        # Conversiones base a unidades SI
+        t_in_k = payload.entrada.temp_c + 273.15
+        p_in_pa = (payload.entrada.pres_barg + 1.01325) * 100000
+        fluido = f"PR::{payload.mezcla}"
 
-            json_limpio = re.sub(r'```json\n|```', '', response.output_text).strip()
-            datos_ia = json.loads(json_limpio)
-            
-            caja = datos_ia.get('caja_fria', {})
-            _, duty_caja = calcular_energia(float(caja.get('flujo_base_lb_hr') or 150000), factor_escala, float(caja.get('t_in_f') or 0), float(caja.get('t_out_f') or 0))
-            
-            exp = datos_ia.get('expander', {})
-            _, work_exp = calcular_energia(float(exp.get('flujo_base_lb_hr') or 150000), factor_escala, float(exp.get('t_in_f') or 0), float(exp.get('t_out_f') or 0))
-            hp_exp = work_exp / 2544.43 if work_exp else 0
+        # MÓDULO 1: Flash Básico
+        if payload.tipo_evaluacion == "flash":
+            h_in_j_kg = CP.PropsSI('H', 'T', t_in_k, 'P', p_in_pa, fluido)
+            d_in_kg_m3 = CP.PropsSI('D', 'T', t_in_k, 'P', p_in_pa, fluido)
             
             return {
                 "status": "success",
-                "parametros_entrada": escenario.model_dump(),
+                "tipo": "flash",
                 "resultados": {
-                    "factor_escala": round(factor_escala, 4),
-                    "recuperacion_c3_porcentaje": datos_ia.get('recuperacion_c3_porcentaje'),
-                    "caja_fria_duty_mmbtu_hr": round(duty_caja / 1e6, 2) if duty_caja else None,
-                    "turboexpander_potencia_hp": round(hp_exp, 1) if hp_exp else None
+                    "entalpia": round(h_in_j_kg / 1000, 2),
+                    "densidad": round(d_in_kg_m3, 2)
                 }
             }
 
-    except Exception as e:
-        error_details = traceback.format_exc()
-        raise HTTPException(status_code=500, detail=f"REPORTE TECNICO:\n{error_details}")
+        # MÓDULO 2: Expansor / Compresor
+        elif payload.tipo_evaluacion == "expander":
+            p_out_pa = (payload.equipo.pres_out_barg + 1.01325) * 100000
+            eficiencia = payload.equipo.eficiencia
 
-# Atrapamos las solicitudes GET (cuando entras desde el navegador) para confirmar que el servidor vive
-@app.get("/{cualquier_ruta:path}")
-def radar_get(request: Request, cualquier_ruta: str):
-    return {"mensaje": "Servidor de IA Activo. Para ejecutar la simulacion, envia un POST desde PowerShell."}
+            # Estado 1 (Entrada)
+            h_in = CP.PropsSI('H', 'T', t_in_k, 'P', p_in_pa, fluido)
+            s_in = CP.PropsSI('S', 'T', t_in_k, 'P', p_in_pa, fluido)
+
+            # Estado 2 Isentrópico (Ideal)
+            h_out_ideal = CP.PropsSI('H', 'S', s_in, 'P', p_out_pa, fluido)
+
+            # Estado 2 Real (Aplicando eficiencia)
+            h_out_real = h_in - eficiencia * (h_in - h_out_ideal)
+
+            # Cálculos de resultados
+            delta_p = payload.entrada.pres_barg - payload.equipo.pres_out_barg
+            delta_h_kj = (h_out_real - h_in) / 1000
+            potencia_kw = abs(delta_h_kj) * (payload.flujo_kg_h / 3600)
+
+            return {
+                "status": "success",
+                "tipo": "expander",
+                "resultados": {
+                    "delta_p": round(delta_p, 2),
+                    "delta_h": round(delta_h_kj, 2),
+                    "potencia": round(potencia_kw, 2)
+                }
+            }
+        
+        else:
+            return {"status": "error", "detalle": "Módulo de evaluación no reconocido."}
+
+    except Exception as e:
+        return {"status": "error", "detalle": traceback.format_exc()}
