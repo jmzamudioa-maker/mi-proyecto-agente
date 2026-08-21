@@ -4,14 +4,12 @@ import os
 import json
 import re
 
-# Importaciones clave para la Nube
-from azure.identity import EnvironmentCredential
+# Usamos la credencial directa y explícita
+from azure.identity import ClientSecretCredential
 from azure.ai.projects import AIProjectClient
 
-# Instanciamos la aplicación FastAPI
 app = FastAPI(title="API Agente Simulador - Planta de Gas")
 
-# Definimos el modelo de datos que recibiremos por web
 class EscenarioRequest(BaseModel):
     flujo_mmscfd: float
     tag_caja: str
@@ -26,17 +24,25 @@ def calcular_energia(flujo_base_lb_hr, factor_escala, t_in_f, t_out_f, cp_asumid
     except:
         return None, None
 
-# ¡NOTA CLAVE! Usamos 'def' normal en lugar de 'async def' para evitar bloqueos en Vercel
 @app.post("/api/simular")
 def ejecutar_simulacion(escenario: EscenarioRequest):
     try:
-        # 1. Autenticación Estricta por Variables de Entorno
-        credential = EnvironmentCredential()
-        endpoint = os.environ.get("AZURE_AI_ENDPOINT")
+        # 1. Extracción y LIMPIEZA de variables (borramos espacios en blanco invisibles)
+        tenant = os.environ.get("AZURE_TENANT_ID", "").strip()
+        client = os.environ.get("AZURE_CLIENT_ID", "").strip()
+        secret = os.environ.get("AZURE_CLIENT_SECRET", "").strip()
+        endpoint = os.environ.get("AZURE_AI_ENDPOINT", "").strip()
         
-        if not endpoint:
-            raise ValueError("Falta la variable de entorno AZURE_AI_ENDPOINT en Vercel.")
+        if not all([tenant, client, secret, endpoint]):
+            raise ValueError("Faltan variables de entorno en Vercel o están vacías.")
 
+        # 2. Autenticación Blindada
+        credential = ClientSecretCredential(
+            tenant_id=tenant,
+            client_id=client,
+            client_secret=secret
+        )
+        
         project_client = AIProjectClient(endpoint=endpoint, credential=credential)
         
         with project_client:
@@ -46,7 +52,6 @@ def ejecutar_simulacion(escenario: EscenarioRequest):
             
             factor_escala = escenario.flujo_mmscfd / 216.7
             
-            # 2. Prompt Estricto
             prompt_calculo = rf"""
             Actúa como un extractor de datos para un simulador riguroso.
             REGLA ABSOLUTA: Tu respuesta debe ser ÚNICAMENTE un objeto JSON. Cero texto. Sin bloques markdown.
@@ -65,13 +70,11 @@ def ejecutar_simulacion(escenario: EscenarioRequest):
             }}
             """
             
-            # 3. Llamada a la IA
             response = openai_client.responses.create(
                 input=[{"role": "user", "content": prompt_calculo}],
                 extra_body={"agent_reference": {"name": my_agent, "version": my_version, "type": "agent_reference"}}
             )
 
-            # 4. Procesamiento
             json_limpio = re.sub(r'```json\n|```', '', response.output_text).strip()
             datos_ia = json.loads(json_limpio)
             
@@ -82,7 +85,6 @@ def ejecutar_simulacion(escenario: EscenarioRequest):
             _, work_exp = calcular_energia(float(exp.get('flujo_base_lb_hr') or 150000), factor_escala, float(exp.get('t_in_f') or 0), float(exp.get('t_out_f') or 0))
             hp_exp = work_exp / 2544.43 if work_exp else 0
             
-            # 5. Respuesta Exitosa
             return {
                 "status": "success",
                 "parametros_entrada": escenario.model_dump(),
@@ -95,5 +97,4 @@ def ejecutar_simulacion(escenario: EscenarioRequest):
             }
 
     except Exception as e:
-        # En caso de error, FastAPI lo devolverá limpio para que sepas qué falló
         raise HTTPException(status_code=500, detail=f"Error del servidor/IA: {str(e)}")
