@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 import os
 import json
@@ -8,7 +9,12 @@ import traceback
 from azure.identity import ClientSecretCredential
 from azure.ai.projects import AIProjectClient
 
-app = FastAPI(title="API Agente Simulador - Planta de Gas")
+# 1. Forzamos a Swagger a vivir en la ruta que Vercel permite
+app = FastAPI(
+    title="API Agente Simulador - Planta de Gas",
+    docs_url="/api/docs",
+    openapi_url="/api/openapi.json"
+)
 
 class EscenarioRequest(BaseModel):
     flujo_mmscfd: float
@@ -24,7 +30,15 @@ def calcular_energia(flujo_base_lb_hr, factor_escala, t_in_f, t_out_f, cp_asumid
     except:
         return None, None
 
+# 2. Redirección automática: Si entras a la raíz, te manda a la interfaz gráfica
+@app.get("/")
+@app.get("/docs")
+def redirigir_interfaz():
+    return RedirectResponse(url="/api/docs")
+
+# 3. REDUNDANCIA DE RUTAS: Atrapamos el POST con o sin el "/api"
 @app.post("/api/simular")
+@app.post("/simular")
 def ejecutar_simulacion(escenario: EscenarioRequest):
     try:
         tenant = os.environ.get("AZURE_TENANT_ID", "").strip()
