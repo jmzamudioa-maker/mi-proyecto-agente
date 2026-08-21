@@ -3,7 +3,7 @@ from pydantic import BaseModel
 import os
 import json
 import re
-from azure.identity import DefaultAzureCredential
+from azure.identity import EnvironmentCredential
 from azure.ai.projects import AIProjectClient
 
 # Instanciamos la aplicación FastAPI
@@ -28,7 +28,7 @@ def calcular_energia(flujo_base_lb_hr, factor_escala, t_in_f, t_out_f, cp_asumid
 async def ejecutar_simulacion(escenario: EscenarioRequest):
     # En Vercel, DefaultAzureCredential leerá las variables de entorno automáticamente
     try:
-        credential = DefaultAzureCredential()
+        credential = EnvironmentCredential()
         endpoint = os.environ.get("AZURE_AI_ENDPOINT", "https://rg-agente-planta-gas-resource.services.ai.azure.com/api/projects/rg-agente-planta-gas")
         
         project_client = AIProjectClient(endpoint=endpoint, credential=credential)
