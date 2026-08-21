@@ -9,7 +9,13 @@ from azure.identity import ClientSecretCredential
 from azure.ai.projects import AIProjectClient
 
 app = FastAPI(title="API Agente Simulador - Planta de Gas")
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 class EscenarioRequest(BaseModel):
     flujo_mmscfd: float
     tag_caja: str
