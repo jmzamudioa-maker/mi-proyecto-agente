@@ -1,5 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, Request, Response
 from pydantic import BaseModel
 import os
 import json
@@ -11,29 +10,29 @@ from azure.ai.projects import AIProjectClient
 
 app = FastAPI(title="API Agente Simulador - Planta de Gas")
 
-# 1. VÁLVULA CHECK DE CORS (Debe ir inmediatamente después de crear la 'app')
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# 2. BYPASS DE BAJO NIVEL (Fuerza un código 200 OK para Vercel)
-@app.options("/{full_path:path}")
-def preflight_handler(request: Request, full_path: str):
-    response = Response(status_code=200)
+# VÁLVULA DE DERIVACIÓN MANUAL (Bypass Absoluto de CORS)
+@app.middleware("http")
+async def bypass_cors_manual(request: Request, call_next):
+    # Si es el mensajero de seguridad (OPTIONS), darle OK inmediato con permisos totales
+    if request.method == "OPTIONS":
+        return Response(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "*",
+                "Access-Control-Allow-Headers": "*"
+            }
+        )
+    
+    # Para el flujo normal de datos (POST), procesar y sellar la salida
+    response = await call_next(request)
     response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     return response
 
-# --- A partir de aquí, deja tu código intacto ---
-    class EscenarioRequest(BaseModel):
-        flujo_mmscfd: float
-        tag_caja: str
-        tag_exp: str
+class EscenarioRequest(BaseModel):
+    flujo_mmscfd: float
+    tag_caja: str
+    tag_exp: str
 
 def calcular_energia(flujo_base_lb_hr, factor_escala, t_in_f, t_out_f, cp_asumido=0.6):
     try:
