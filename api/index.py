@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
 import json
@@ -9,6 +10,8 @@ from azure.identity import ClientSecretCredential
 from azure.ai.projects import AIProjectClient
 
 app = FastAPI(title="API Agente Simulador - Planta de Gas")
+
+# 1. VÁLVULA CHECK DE CORS (Debe ir inmediatamente después de crear la 'app')
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,6 +19,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 2. BYPASS DE BAJO NIVEL (Fuerza un código 200 OK para Vercel)
+@app.options("/{full_path:path}")
+def preflight_handler(request: Request, full_path: str):
+    response = Response(status_code=200)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    return response
+
+# --- A partir de aquí, deja tu código intacto ---
+class EscenarioRequest(BaseModel):
 class EscenarioRequest(BaseModel):
     flujo_mmscfd: float
     tag_caja: str
