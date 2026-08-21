@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 import os
@@ -9,7 +9,6 @@ import traceback
 from azure.identity import ClientSecretCredential
 from azure.ai.projects import AIProjectClient
 
-# 1. Forzamos a Swagger a vivir en la ruta que Vercel permite
 app = FastAPI(
     title="API Agente Simulador - Planta de Gas",
     docs_url="/api/docs",
@@ -30,13 +29,11 @@ def calcular_energia(flujo_base_lb_hr, factor_escala, t_in_f, t_out_f, cp_asumid
     except:
         return None, None
 
-# 2. Redirección automática: Si entras a la raíz, te manda a la interfaz gráfica
 @app.get("/")
 @app.get("/docs")
 def redirigir_interfaz():
     return RedirectResponse(url="/api/docs")
 
-# 3. REDUNDANCIA DE RUTAS: Atrapamos el POST con o sin el "/api"
 @app.post("/api/simular")
 @app.post("/simular")
 def ejecutar_simulacion(escenario: EscenarioRequest):
@@ -111,3 +108,15 @@ def ejecutar_simulacion(escenario: EscenarioRequest):
     except Exception as e:
         error_details = traceback.format_exc()
         raise HTTPException(status_code=500, detail=f"REPORTE TECNICO:\n{error_details}")
+
+# --- RADAR DE DIAGNÓSTICO (ATRAPA TODO) ---
+@app.api_route("/{ruta_dinamica:path}", methods=["GET", "POST"])
+def radar_de_rutas(request: Request, ruta_dinamica: str):
+    return {
+        "estado": "Servidor Vivo pero Ruta Perdida",
+        "diagnostico_de_red": {
+            "ruta_que_ve_fastapi": ruta_dinamica,
+            "metodo": request.method,
+            "url_completa": str(request.url)
+        }
+    }
