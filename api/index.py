@@ -97,4 +97,5 @@ def ejecutar_simulacion(escenario: EscenarioRequest):
     except Exception as e:
         # AQUÍ ESTÁ LA MAGIA: Esto extraerá la raíz profunda del error de red
         error_details = traceback.format_exc()
+# Reactivando el webhook de Vercel
         raise HTTPException(status_code=500, detail=f"REPORTE TÉCNICO:\n{error_details}")
