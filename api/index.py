@@ -3,7 +3,7 @@ from pydantic import BaseModel
 import os
 import json
 import re
-import traceback  # <--- NUEVA LIBRERÍA DE DIAGNÓSTICO
+import traceback
 
 from azure.identity import ClientSecretCredential
 from azure.ai.projects import AIProjectClient
@@ -94,8 +94,6 @@ def ejecutar_simulacion(escenario: EscenarioRequest):
                 }
             }
 
-        except Exception as e:
-        # AQUÍ ESTÁ LA MAGIA: Esto extraerá la raíz profunda del error de red
+    except Exception as e:
         error_details = traceback.format_exc()
-        raise HTTPException(status_code=500, detail=f"REPORTE TÉCNICO:\n{error_details}")
-# Reactivando el webhook de Vercel
+        raise HTTPException(status_code=500, detail=f"REPORTE TECNICO:\n{error_details}")
