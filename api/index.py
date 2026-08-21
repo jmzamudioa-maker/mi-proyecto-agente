@@ -75,9 +75,9 @@ def ejecutar_simulacion(escenario: EscenarioRequest):
             	input=[{"role": "user", "content": prompt_calculo}],
             	extra_body={"agent_reference": {"name": "Agente-Experto-Planta-Gas", "version": "1", "type": "agent_reference"}}
         	)
-             model="gpt-4o",
-                input=[{"role": "user", "content": prompt_calculo}],
-                extra_body={"agent_reference": {"name": "Agente-Experto-Planta-Gas", "version": "1", "type": "agent_reference"}}
+            model="gpt-4o",
+            input=[{"role": "user", "content": prompt_calculo}],
+            extra_body={"agent_reference": {"name": "Agente-Experto-Planta-Gas", "version": "1", "type": "agent_reference"}}
 
             json_limpio = re.sub(r'```json\n|```', '', response.output_text).strip()
             datos_ia = json.loads(json_limpio)
