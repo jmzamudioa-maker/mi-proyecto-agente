@@ -93,9 +93,9 @@ def ejecutar_simulacion(escenario: EscenarioRequest):
                     "turboexpander_potencia_hp": round(hp_exp, 1) if hp_exp else None
                 }
             }
-# Despertando el webhook desde la nube
-    except Exception as e:
+
+        except Exception as e:
         # AQUÍ ESTÁ LA MAGIA: Esto extraerá la raíz profunda del error de red
         error_details = traceback.format_exc()
-# Reactivando el webhook de Vercel
         raise HTTPException(status_code=500, detail=f"REPORTE TÉCNICO:\n{error_details}")
+# Reactivando el webhook de Vercel
