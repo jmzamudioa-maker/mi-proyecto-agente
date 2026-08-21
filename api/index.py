@@ -1,5 +1,4 @@
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 import os
 import json
@@ -9,11 +8,7 @@ import traceback
 from azure.identity import ClientSecretCredential
 from azure.ai.projects import AIProjectClient
 
-app = FastAPI(
-    title="API Agente Simulador - Planta de Gas",
-    docs_url="/api/docs",
-    openapi_url="/api/openapi.json"
-)
+app = FastAPI(title="API Agente Simulador - Planta de Gas")
 
 class EscenarioRequest(BaseModel):
     flujo_mmscfd: float
@@ -29,13 +24,9 @@ def calcular_energia(flujo_base_lb_hr, factor_escala, t_in_f, t_out_f, cp_asumid
     except:
         return None, None
 
-@app.get("/")
-@app.get("/docs")
-def redirigir_interfaz():
-    return RedirectResponse(url="/api/docs")
-
-@app.post("/api/simular")
-@app.post("/simular")
+# TÁCTICA DE INGENIERÍA: EL ATRAPALOTODO
+# Interceptamos CUALQUIER solicitud POST (sin importar cómo Vercel mutile la ruta)
+@app.post("/{cualquier_ruta:path}")
 def ejecutar_simulacion(escenario: EscenarioRequest):
     try:
         tenant = os.environ.get("AZURE_TENANT_ID", "").strip()
@@ -109,14 +100,7 @@ def ejecutar_simulacion(escenario: EscenarioRequest):
         error_details = traceback.format_exc()
         raise HTTPException(status_code=500, detail=f"REPORTE TECNICO:\n{error_details}")
 
-# --- RADAR DE DIAGNÓSTICO (ATRAPA TODO) ---
-@app.api_route("/{ruta_dinamica:path}", methods=["GET", "POST"])
-def radar_de_rutas(request: Request, ruta_dinamica: str):
-    return {
-        "estado": "Servidor Vivo pero Ruta Perdida",
-        "diagnostico_de_red": {
-            "ruta_que_ve_fastapi": ruta_dinamica,
-            "metodo": request.method,
-            "url_completa": str(request.url)
-        }
-    }
+# Atrapamos las solicitudes GET (cuando entras desde el navegador) para confirmar que el servidor vive
+@app.get("/{cualquier_ruta:path}")
+def radar_get(request: Request, cualquier_ruta: str):
+    return {"mensaje": "Servidor de IA Activo. Para ejecutar la simulacion, envia un POST desde PowerShell."}
